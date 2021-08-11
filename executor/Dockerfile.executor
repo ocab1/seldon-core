@@ -1,5 +1,7 @@
 # Build the manager binary
+# FROM golang as builder
 FROM golang:1.13 as builder
+
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -19,12 +21,28 @@ COPY logger/ logger/
 COPY k8s/ k8s/
 
 # Build
-RUN go build -a -o executor cmd/executor/main.go
+RUN apt-get update
+# RUN apt-get install -y crossbuild-essential-armel
+# ENV GOOS linux
+# ENV GOARCH arm
+# ENV CGO_ENABLED 1
+# ENV CC arm-linux-gnueabi-gcc
+# RUN go mod tidy && go mod vendor
+# RUN apt-get install -y librdkafka-dev
+RUN git clone https://github.com/edenhill/librdkafka.git && cd librdkafka && ./configure --install-deps --prefix /usr
+RUN cd librdkafka && make
+RUN cd librdkafka && make install
+# RUN go get github.com/confluentinc/confluent-kafka-go/kafka
+# RUN go get gopkg.in/confluentinc/confluent-kafka-go.v1/kafka/librdkafka
+# ENV PKG_CONFIG_PATH $PKG_CONFIG_PATH:/usr/lib/pkgconfig/
+# RUN go build -a -o executor cmd/executor/main.go 
+RUN go build -tags dynamic -a -o executor cmd/executor/main.go 
 
 # Get MPL licensed dependencies
 RUN wget -O hashicorp-golang-lru.tar.gz https://github.com/hashicorp/golang-lru/archive/master.tar.gz
 RUN wget -O armon-consul-api.tar.gz https://github.com/armon/consul-api/archive/master.tar.gz
-RUN wget -O hasicorp-hcl.tar.gz https://github.com/hashicorp/hcl/archive/master.tar.gz
+RUN go get github.com/hashicorp/hcl/v2
+
 
 # Copy OpenAPI folder and change the permissions
 COPY api/rest/openapi/ /openapi/
@@ -38,7 +56,6 @@ COPY --from=builder /workspace/executor .
 COPY licenses/license.txt licenses/license.txt
 COPY --from=builder /workspace/hashicorp-golang-lru.tar.gz licenses/mpl_source/hashicorp-golang-lru.tar.gz
 COPY --from=builder /workspace/armon-consul-api.tar.gz licenses/mpl_source/armon-consul-api.tar.gz
-COPY --from=builder /workspace/hasicorp-hcl.tar.gz licenses/mpl_source/hasicorp-hcl.tar.gz
 
 # Copy openapi spec and swagger UI files
 COPY --from=builder /openapi/ /openapi/
